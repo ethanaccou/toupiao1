@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Voting Panel</title>
+<title>Secure Voting</title>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
 <style>
 body {
     font-family: Arial;
-    background: #f0f2f5;
+    background: #f2f2f2;
     text-align: center;
-}
-
-h1 {
-    margin: 20px;
 }
 
 .container {
@@ -24,38 +24,26 @@ h1 {
 .card {
     background: white;
     padding: 15px;
-    border-radius: 12px;
+    border-radius: 10px;
     width: 180px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
 img {
     width: 100px;
-    height: 100px;
     border-radius: 50%;
 }
 
-.name {
-    font-weight: bold;
-    margin: 10px 0;
-}
-
-.votes {
-    font-size: 18px;
-    margin: 10px 0;
-}
-
 button {
-    padding: 8px 12px;
-    border: none;
-    background: #4CAF50;
+    background: green;
     color: white;
-    border-radius: 6px;
+    border: none;
+    padding: 8px;
     cursor: pointer;
 }
 
-button:hover {
-    background: #45a049;
+button:disabled {
+    background: gray;
+    cursor: not-allowed;
 }
 </style>
 </head>
@@ -66,29 +54,65 @@ button:hover {
 <div class="container" id="container"></div>
 
 <script>
-let players = JSON.parse(localStorage.getItem("players"));
+// 🔥 填你的 Firebase 配置
+const firebaseConfig = {
+  apiKey: "AIzaSyCeugzTHy2r3kOW8C_xmork0Wy94lNzT8w",
+  authDomain: "system-data-e4222.firebaseapp.com",
+  databaseURL: "https://system-data-e4222-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "system-data-e4222",
+  storageBucket: "system-data-e4222.firebasestorage.app",
+  messagingSenderId: "1052551310862",
+  appId: "1:1052551310862:web:601f1c9a5fb298c988165f"
+};
 
-if (!players) {
-    players = [
-        { name: "Alex Carter", votes: 0, img: "https://i.pravatar.cc/100?img=1" },
-        { name: "Sophie Lee", votes: 0, img: "https://i.pravatar.cc/100?img=2" },
-        { name: "Daniel Cruz", votes: 0, img: "https://i.pravatar.cc/100?img=3" },
-        { name: "Mia Johnson", votes: 0, img: "https://i.pravatar.cc/100?img=4" },
-        { name: "Ryan Scott", votes: 0, img: "https://i.pravatar.cc/100?img=5" }
-    ];
-}
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// 本地是否已投票
+let hasVoted = localStorage.getItem("hasVoted");
+
+// 默认数据
+const defaultPlayers = [
+    { name: "Alex Carter", votes: 0, img: "https://i.pravatar.cc/100?img=1" },
+    { name: "Sophie Lee", votes: 0, img: "https://i.pravatar.cc/100?img=2" },
+    { name: "Daniel Cruz", votes: 0, img: "https://i.pravatar.cc/100?img=3" },
+    { name: "Mia Johnson", votes: 0, img: "https://i.pravatar.cc/100?img=4" },
+    { name: "Ryan Scott", votes: 0, img: "https://i.pravatar.cc/100?img=5" }
+];
+
+// 初始化数据库
+db.ref("players").once("value", snapshot => {
+    if (!snapshot.exists()) {
+        db.ref("players").set(defaultPlayers);
+    }
+});
 
 const container = document.getElementById("container");
 
-function save() {
-    localStorage.setItem("players", JSON.stringify(players));
-}
+// 🚀 页面加载时排序一次
+let initialLoad = true;
+let cachedPlayers = [];
 
-function render() {
+// 实时监听
+db.ref("players").on("value", snapshot => {
+    let players = snapshot.val();
+
+    if (initialLoad) {
+        players.sort((a, b) => b.votes - a.votes);
+        cachedPlayers = players;
+        initialLoad = false;
+    } else {
+        // 不重新排序，保持顺序
+        players = cachedPlayers.map((p, i) => ({
+            ...players[i]
+        }));
+    }
+
+    render(players);
+});
+
+function render(players) {
     container.innerHTML = "";
-
-    // 排序（票数高在前）
-    players.sort((a, b) => b.votes - a.votes);
 
     players.forEach((player, index) => {
         const card = document.createElement("div");
@@ -96,22 +120,30 @@ function render() {
 
         card.innerHTML = `
             <img src="${player.img}">
-            <div class="name">${player.name}</div>
-            <div class="votes">Votes: ${player.votes}</div>
-            <button onclick="vote(${index})">+1 Vote</button>
+            <div><b>${player.name}</b></div>
+            <div>Votes: ${player.votes}</div>
+            <button onclick="vote(${index})" ${hasVoted ? "disabled" : ""}>
+                ${hasVoted ? "Voted" : "+1 Vote"}
+            </button>
         `;
 
         container.appendChild(card);
     });
 }
 
+// 投票
 function vote(index) {
-    players[index].votes++;
-    save();
-    render();
-}
+    if (hasVoted) return;
 
-render();
+    const playerRef = db.ref("players/" + index + "/votes");
+
+    playerRef.transaction(current => (current || 0) + 1);
+
+    localStorage.setItem("hasVoted", "true");
+    hasVoted = true;
+
+    alert("Vote submitted!");
+}
 </script>
 
 </body>
